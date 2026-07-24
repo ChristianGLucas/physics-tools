@@ -1,6 +1,13 @@
 name: christiangeorgelucas/physics-tools
 version: 0.1.0
 language: python
+build:
+  # Axiom's python:3.12-slim build image has no C++ toolchain. pybullet
+  # ships prebuilt manylinux wheels for common platforms, but when the
+  # build platform doesn't match one, pip falls back to compiling Bullet
+  # (a C++ physics engine) from source, which needs g++.
+  system_deps:
+    - g++
 description: >-
   Deterministic, offline rigid-body physics for AI agents: simulate a
   caller-supplied scene of free rigid bodies (box/sphere/capsule/cylinder/
