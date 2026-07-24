@@ -170,6 +170,20 @@ def test_duplicate_body_id_returns_structured_error_not_crash():
     assert result.error.code == "DUPLICATE_ID"
 
 
+def test_plane_with_nonzero_mass_returns_structured_error_not_crash():
+    """Regression: a plane shape (an infinite half-space) is only
+    physically meaningful as a static (mass 0) body; this used to be
+    silently accepted and simulated as a falling infinite plane."""
+    scene = Scene(
+        bodies=[Body(id="bad", shape=Shape(type="plane", plane_normal={"x": 0, "y": 0, "z": 1}), mass=1.0)],
+        gravity={"x": 0, "y": 0, "z": -9.8},
+        timestep=1.0 / 240.0,
+        steps=1,
+    )
+    result = simulate_scene(_TestContext(), SimulateSceneInput(scene=scene))
+    assert result.error.code == "INVALID_ARGUMENT"
+
+
 def test_zero_timestep_returns_structured_error_not_crash():
     scene = Scene(
         bodies=[_sphere("a", radius=0.5, mass=1.0, position=(0, 0, 1))],

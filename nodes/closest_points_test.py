@@ -65,3 +65,15 @@ def test_non_positive_max_distance_returns_structured_error_not_crash():
         ClosestPointsInput(scene=scene, body_a_id="a", body_b_id="a", max_distance=0.0),
     )
     assert result.error.code == "INVALID_ARGUMENT"
+
+
+def test_non_finite_max_distance_returns_structured_error_not_crash():
+    """Regression: max_distance used to be checked only for `<= 0`, so
+    NaN (which fails every ordering comparison) slipped past validation
+    and silently produced found=False instead of a structured error."""
+    scene = Scene(bodies=[Body(id="a", shape=Shape(type="sphere", radius=0.5), mass=0.0)])
+    result = closest_points(
+        _TestContext(),
+        ClosestPointsInput(scene=scene, body_a_id="a", body_b_id="a", max_distance=float("nan")),
+    )
+    assert result.error.code == "NON_FINITE_VALUE"

@@ -192,6 +192,12 @@ def build_body(cid, body):
     _finite(body.mass)
     if body.mass < 0:
         raise PhysicsInputError("INVALID_ARGUMENT", f"body {body.id!r}: mass must be >= 0")
+    if (body.shape.type or "").strip().lower() == "plane" and body.mass != 0:
+        raise PhysicsInputError(
+            "INVALID_ARGUMENT",
+            f"body {body.id!r}: a plane shape (an infinite half-space) must have mass 0, "
+            f"got {body.mass!r}",
+        )
 
     col = build_collision_shape(cid, body.shape)
     pos = to_vec3(body.position, "position")

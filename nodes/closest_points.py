@@ -2,6 +2,8 @@ import pybullet as p
 
 from gen.messages_pb2 import ClosestPointsInput, ClosestPointsOutput
 from gen.axiom_context import AxiomContext
+import math
+
 from nodes._physics import build_scene, physics_client, point3, err, PhysicsInputError
 
 
@@ -11,6 +13,10 @@ def closest_points(ax: AxiomContext, input: ClosestPointsInput) -> ClosestPoints
     them.
     """
     try:
+        if not math.isfinite(input.max_distance):
+            return ClosestPointsOutput(
+                error=err("NON_FINITE_VALUE", f"max_distance must be finite, got {input.max_distance!r}")
+            )
         if input.max_distance <= 0:
             return ClosestPointsOutput(
                 error=err("INVALID_ARGUMENT", "max_distance must be > 0")
