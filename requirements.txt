@@ -1,0 +1,5 @@
+# pybullet is the official Python interface to Bullet Physics (zlib license),
+# used headless (DIRECT mode) for deterministic offline rigid-body physics.
+# Ships prebuilt wheels for the platforms Axiom builds for — no compiler
+# needed, no system_deps.
+pybullet==3.2.7

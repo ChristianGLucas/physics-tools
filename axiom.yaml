@@ -1,0 +1,82 @@
+name: christiangeorgelucas/physics-tools
+version: 0.1.0
+language: python
+description: >-
+  Deterministic, offline rigid-body physics for AI agents: simulate a
+  caller-supplied scene of free rigid bodies (box/sphere/capsule/cylinder/
+  plane/convex-mesh shapes) under gravity for N fixed-timestep steps, cast
+  rays, detect contacts and penetration depth, find the closest points
+  between two bodies, compute axis-aligned bounding boxes, and solve
+  inverse/forward kinematics and inverse dynamics on an inline articulated
+  chain (no URDF/file/URL — geometry is always supplied inline). Every node
+  is a pure input->output function: connect headless (DIRECT mode), build
+  the scene, run, disconnect. Zero linear/angular damping always, so
+  undamped closed-form physics (free fall, projectile range, elastic-
+  collision momentum conservation) applies directly. Wraps the
+  zlib-licensed pybullet (the official Python interface to Bullet Physics).
+nodes:
+    - name: SimulateScene
+      input: SimulateSceneInput
+      output: SimulateSceneOutput
+      description: >-
+        Advance a scene of free rigid bodies under gravity for a fixed
+        number of fixed-timestep steps and return each body's final
+        position, orientation, linear velocity, and angular velocity (or
+        the full per-step trajectory, if requested). Deterministic: the
+        same scene always produces byte-identical output.
+    - name: RayCast
+      input: RayCastInput
+      output: RayCastOutput
+      description: >-
+        Cast one or more rays against a scene of bodies placed exactly as
+        given (not simulated), returning for each ray whether it hit, which
+        body, the hit point and surface normal, and the hit fraction along
+        the ray.
+    - name: ContactPoints
+      input: ContactPointsInput
+      output: ContactPointsOutput
+      description: >-
+        Detect collisions between the bodies in a scene placed exactly as
+        given (not simulated), returning each contact's points on both
+        bodies, the contact normal, and the separation distance (negative
+        means penetration, and by how much). Reports every touching or
+        overlapping pair regardless of mass (including two static/mass-0
+        bodies), unlike pybullet's own contact-detection pipeline, which
+        silently skips static-static pairs.
+    - name: ClosestPoints
+      input: ClosestPointsInput
+      output: ClosestPointsOutput
+      description: >-
+        Find the nearest pair of points between two named bodies in a
+        scene (within a caller-supplied search radius) and the distance
+        between them.
+    - name: ComputeAABB
+      input: ComputeAABBInput
+      output: ComputeAABBOutput
+      description: >-
+        Compute the world-space axis-aligned bounding box of one, several,
+        or every body in a scene.
+    - name: InverseKinematics
+      input: InverseKinematicsInput
+      output: InverseKinematicsOutput
+      description: >-
+        Solve for the joint values of an inline-defined articulated chain
+        (built entirely from caller-supplied links; no URDF/file/URL) that
+        bring a chosen end-effector link as close as possible to a target
+        position (and, optionally, orientation).
+    - name: ForwardKinematics
+      input: ForwardKinematicsInput
+      output: ForwardKinematicsOutput
+      description: >-
+        Given an inline-defined articulated chain and a joint value for
+        every link, compute the resulting world-space position and
+        orientation of every link.
+    - name: InverseDynamics
+      input: InverseDynamicsInput
+      output: InverseDynamicsOutput
+      description: >-
+        Given an inline-defined articulated chain and, for every joint, its
+        position, velocity, and desired acceleration, compute the joint
+        torques (or forces, for prismatic joints) required to produce
+        those accelerations under the given gravity, via the Recursive
+        Newton-Euler algorithm.

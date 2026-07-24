@@ -1,0 +1,333 @@
+// This file defines the data contracts (messages) for your Axiom package.
+// Every node's --input and --output refers to a message defined here.
+//
+// Run `axiom create message <Name>` to scaffold a new message below.
+// Run `axiom generate` to compile these definitions into language bindings in gen/.
+//
+// DOCUMENTATION
+//   Comments written directly above a message or field declaration are extracted
+//   automatically at publish time and shown in the Axiom registry as documentation.
+//   Write your descriptions there — no separate doc files needed.
+//
+//   Leading comment  (no blank line before the declaration) → registry description ✓
+//   Detached comment (blank line before the declaration)    → ignored by registry  ✗
+//
+// This file is yours to edit. Axiom only appends new message blocks — it never
+// overwrites or removes content you have written.
+
+syntax = "proto3";
+
+package christiangeorgelucas.physics_tools;
+
+// Structured error shared by every result message in this package. On
+// success `code` is empty; on failure it carries a stable machine-readable
+// token (e.g. "INVALID_SHAPE", "DUPLICATE_ID", "INVALID_JOINT",
+// "INVALID_ARGUMENT", "SIMULATION_FAILED") and `message` a human-readable
+// detail. A node never crashes or leaks a raw traceback on malformed or
+// physically-invalid input — it always returns this instead.
+message Error {
+  string code = 1;
+  string message = 2;
+}
+
+// A point or free vector in 3D space — used for positions, velocities,
+// gravity, ray endpoints, and joint axes. Field names match
+// christiangeorgelucas/mesh-tools's Point3 for flow-boundary coherence.
+message Point3 {
+  double x = 1;
+  double y = 2;
+  double z = 3;
+}
+
+// An orientation quaternion (x, y, z, w). The all-zero value is treated as
+// the identity orientation (0, 0, 0, 1); any other value is normalized
+// before use, so it need not be pre-normalized by the caller.
+message Quaternion {
+  double x = 1;
+  double y = 2;
+  double z = 3;
+  double w = 4;
+}
+
+// A collision shape. `type` selects which of the other fields apply:
+//   "box"      — half_extents (x/y/z half-lengths)
+//   "sphere"   — radius
+//   "capsule"  — radius, height (cylindrical section length; local +Z axis)
+//   "cylinder" — radius, height (local +Z axis)
+//   "plane"    — plane_normal, plane_constant (an infinite half-space;
+//                only valid for a body with mass 0)
+//   "mesh"     — mesh_vertices, the convex hull of at least 4 points
+//                (pybullet always collides against the convex hull of the
+//                given points — this is not a concave/triangle-soup collider)
+message Shape {
+  string type = 1;
+  Point3 half_extents = 2;
+  double radius = 3;
+  double height = 4;
+  Point3 plane_normal = 5;
+  double plane_constant = 6;
+  repeated Point3 mesh_vertices = 7;
+}
+
+// A single free rigid body placed in a Scene.
+message Body {
+  // Caller-assigned identifier, unique within the scene, echoed back in outputs.
+  string id = 1;
+  Shape shape = 2;
+  // Mass in kg. 0 means static/immovable (e.g. the ground plane).
+  double mass = 3;
+  Point3 position = 4;
+  // Defaults to identity if all-zero. Need not be pre-normalized.
+  Quaternion orientation = 5;
+  Point3 linear_velocity = 6;
+  Point3 angular_velocity = 7;
+  // Coefficient of restitution (bounciness). 0 = perfectly inelastic
+  // (the default when unset), 1 = perfectly elastic.
+  double restitution = 8;
+  // Coulomb friction coefficient. 0 = frictionless (the default when
+  // unset). Every body simulates with zero linear/angular damping
+  // (no artificial drag) regardless of this field, so undamped analytical
+  // formulas (free fall, elastic collision) apply directly.
+  double friction = 9;
+}
+
+// A physics scene: a set of free rigid bodies plus global simulation
+// parameters, shared by SimulateScene, RayCast, ContactPoints, ClosestPoints,
+// and ComputeAABB (which place the bodies as given and do not advance time
+// unless the node is SimulateScene).
+message Scene {
+  repeated Body bodies = 1;
+  // Gravity vector in m/s^2, e.g. (0, 0, -9.8) for Earth's surface.
+  // (0, 0, 0) is a valid explicit zero-gravity scene, not "unset".
+  Point3 gravity = 2;
+  // Fixed integration timestep in seconds. Must be > 0. Typical: 1/240.
+  double timestep = 3;
+  // Number of simulation steps to advance. Must be >= 0. Ignored by every
+  // node except SimulateScene.
+  int32 steps = 4;
+  // Constraint-solver iterations per step. 0 means "use the engine default" (50).
+  int32 solver_iterations = 5;
+  // SimulateScene only. If true, the output includes every intermediate
+  // step's body states, not just the final one.
+  bool record_trajectory = 6;
+}
+
+message BodyState {
+  string id = 1;
+  Point3 position = 2;
+  Quaternion orientation = 3;
+  Point3 linear_velocity = 4;
+  Point3 angular_velocity = 5;
+}
+
+message SimulationStep {
+  // 1-based count of steps applied so far when this state was recorded.
+  int32 step_index = 1;
+  // step_index * scene.timestep.
+  double time = 2;
+  repeated BodyState bodies = 3;
+}
+
+message SimulateSceneInput {
+  Scene scene = 1;
+}
+
+message SimulateSceneOutput {
+  // State of every body after all `scene.steps` steps have been applied.
+  repeated BodyState final_bodies = 1;
+  // Present only when scene.record_trajectory is true: one entry per step.
+  repeated SimulationStep trajectory = 2;
+  // Set (code non-empty) on any invalid input instead of a crash.
+  Error error = 3;
+}
+
+message Ray {
+  // Caller-assigned identifier, echoed back in the matching RayHit.
+  string id = 1;
+  // Named from_point/to_point (not from/to) because `from` is a reserved
+  // word in several of the target languages' generated bindings.
+  Point3 from_point = 2;
+  Point3 to_point = 3;
+}
+
+message RayCastInput {
+  // Bodies are placed exactly as given; the scene is not stepped/simulated.
+  Scene scene = 1;
+  repeated Ray rays = 2;
+}
+
+message RayHit {
+  string ray_id = 1;
+  bool hit = 2;
+  // Empty when hit is false.
+  string body_id = 3;
+  Point3 point = 4;
+  Point3 normal = 5;
+  // Fraction of the from->to segment at which the hit occurred, in [0, 1].
+  double fraction = 6;
+}
+
+message RayCastOutput {
+  repeated RayHit hits = 1;
+  Error error = 2;
+}
+
+message ContactPointsInput {
+  // Bodies are placed exactly as given; contacts are detected at that
+  // static configuration — the scene is not stepped/simulated first.
+  Scene scene = 1;
+}
+
+message Contact {
+  string body_a_id = 1;
+  string body_b_id = 2;
+  Point3 point_on_a = 3;
+  Point3 point_on_b = 4;
+  // Contact normal on body B, pointing from A toward B.
+  Point3 normal_on_b = 5;
+  // Separation distance. Negative means the bodies are penetrating by
+  // that depth.
+  double distance = 6;
+}
+
+message ContactPointsOutput {
+  repeated Contact contacts = 1;
+  Error error = 2;
+}
+
+message ClosestPointsInput {
+  Scene scene = 1;
+  string body_a_id = 2;
+  string body_b_id = 3;
+  // Only pairs within this distance are considered. Must be > 0.
+  double max_distance = 4;
+}
+
+message ClosestPointsOutput {
+  // False if body_a_id/body_b_id are farther apart than max_distance
+  // (or either id is not found).
+  bool found = 1;
+  Point3 point_on_a = 2;
+  Point3 point_on_b = 3;
+  double distance = 4;
+  Error error = 5;
+}
+
+message ComputeAABBInput {
+  Scene scene = 1;
+  // If empty, compute for every body in the scene; else only these ids.
+  repeated string body_ids = 2;
+}
+
+message AABB {
+  string body_id = 1;
+  Point3 min = 2;
+  Point3 max = 3;
+}
+
+message ComputeAABBOutput {
+  repeated AABB boxes = 1;
+  Error error = 2;
+}
+
+// One link of an articulated kinematic chain, connected to its parent by a
+// single joint — pybullet's multi-body convention. Built entirely inline
+// from caller-supplied geometry; no URDF, file, or URL is ever loaded.
+// IMPORTANT for InverseDynamics/gravity-torque modeling: a link's `mass`
+// sits exactly AT that link's own joint frame (zero moment arm from its
+// own joint) — rotating a link's joint never exerts gravity/inertial
+// torque from that SAME link's mass, only from its descendants' mass. To
+// model a mass at a distance from a joint (e.g. a pendulum bob at the end
+// of an arm), give the joint its own link with a negligible mass, then
+// attach a child link with joint_type "fixed" at the desired offset that
+// carries the real mass — the same technique URDF-based tools use for a
+// non-zero center-of-mass offset.
+message Link {
+  // Caller-assigned identifier, echoed back in outputs.
+  string id = 1;
+  Shape shape = 2;
+  double mass = 3;
+  // Index into the chain's `links` list of this link's parent, or -1 to
+  // attach directly to the fixed base. Must reference an earlier entry in
+  // the list (i.e. < this link's own index) to keep the chain acyclic.
+  int32 parent_index = 4;
+  // One of "revolute", "prismatic", "fixed".
+  string joint_type = 5;
+  // Joint rotation (revolute) or translation (prismatic) axis, in the
+  // parent joint's local frame. Ignored for "fixed".
+  Point3 joint_axis = 6;
+  // Position of this link's joint frame, relative to the parent joint
+  // frame (or the base frame, if parent_index is -1).
+  Point3 position = 7;
+  Quaternion orientation = 8;
+}
+
+// An articulated kinematic chain: a fixed base plus an ordered list of
+// links, each attached to an earlier link (or the base) by one joint.
+message Chain {
+  Point3 base_position = 1;
+  Quaternion base_orientation = 2;
+  repeated Link links = 3;
+}
+
+message InverseKinematicsInput {
+  Chain chain = 1;
+  // Index into chain.links of the end effector to solve for.
+  int32 end_effector_link_index = 2;
+  Point3 target_position = 3;
+  // Only used when use_orientation is true (a zero quaternion is itself a
+  // valid target orientation via the identity convention, so it cannot
+  // double as an "unset" sentinel).
+  Quaternion target_orientation = 4;
+  bool use_orientation = 5;
+}
+
+message InverseKinematicsOutput {
+  // One joint value per link, in chain.links order (0 for "fixed" joints).
+  repeated double joint_positions = 1;
+  // The end effector's position under the returned joint_positions
+  // (computed via forward kinematics), so the caller can judge how close
+  // the solver actually got to target_position — IK is least-squares, not
+  // guaranteed-exact, especially for an unreachable target.
+  Point3 achieved_position = 2;
+  Error error = 3;
+}
+
+message ForwardKinematicsInput {
+  Chain chain = 1;
+  // One joint value per link, in chain.links order. Length must equal
+  // len(chain.links).
+  repeated double joint_positions = 2;
+}
+
+message LinkPose {
+  string link_id = 1;
+  Point3 position = 2;
+  Quaternion orientation = 3;
+}
+
+message ForwardKinematicsOutput {
+  repeated LinkPose links = 1;
+  Error error = 2;
+}
+
+message InverseDynamicsInput {
+  Chain chain = 1;
+  // One value per link, in chain.links order.
+  repeated double joint_positions = 2;
+  repeated double joint_velocities = 3;
+  repeated double joint_accelerations = 4;
+  // Gravity vector in m/s^2, e.g. (0, 0, -9.8) for Earth's surface.
+  // (0, 0, 0) is a valid explicit zero-gravity chain (e.g. an orbital
+  // manipulator), not "unset" — there is no implicit Earth-gravity
+  // default, exactly like Scene.gravity.
+  Point3 gravity = 5;
+}
+
+message InverseDynamicsOutput {
+  // Joint torque (revolute) or force (prismatic) required to produce the
+  // requested joint_accelerations at the given joint_positions/velocities,
+  // in chain.links order, via the Recursive Newton-Euler algorithm.
+  repeated double joint_torques = 1;
+  Error error = 2;
+}
